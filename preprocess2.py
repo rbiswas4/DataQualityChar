@@ -322,6 +322,7 @@ def parser_augment_new(snid, ind, header):
         obs = obs.fillna(-999.)
 
 	t_arr = obs.loc[flts[0]].index.values #[obs[i][0] for i in xrange(len(obs))]
+        t_arr = (t_arr - t_arr.min())/time_norm
 	g_arr = obs.loc['g'].FLUXCAL.values/flux_norm #[obs[i][1] for i in xrange(len(obs))]
 	g_err_arr = obs.loc['g'].FLUXCALERR.values/flux_norm #[obs[i][5] for i in xrange(len(obs))]
 	r_arr = obs.loc['r'].FLUXCAL.values/flux_norm #[obs[i][2] for i in xrange(len(obs))]
