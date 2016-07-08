@@ -288,19 +288,10 @@ def parser_augment_new(snid, ind, header):
         import sncosmo
         print snid
 
-        snphot = sncosmo.read_snana_fits('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS', 
-                                         '../MINION_1016_10YR_DDF/LSST_Ia_PHOT.FITS',
-                                         snids=[snid])
-        data = pd.DataFrame(np.asarray(snphot[0]))
-        data = data.query('MAG < 99')
-        survey = data.TELESCOPE[0]
-        data = data[['MJD','FLT','FLUXCAL','FLUXCALERR']]
-        print data.head()
-
-        filters = [i[-1] for i in header.columns.values if i.startswith('SIM_PEAKMAG_')]
+        filters = np.array([i[-1] for i in header.columns.values if i.startswith('SIM_PEAKMAG_')])
 
         sn_type = header.ix[ind].SNTYPE
-        sim_type = header.ix[ind].SIM_TYPE_NAME
+        sim_type = header.ix[ind].SIM_TYPE_NAME.strip()
         sim_z = header.ix[ind].SIM_REDSHIFT_HELIO
         ra = header.ix[ind].RA
         decl = header.ix[ind].DECL
@@ -308,30 +299,69 @@ def parser_augment_new(snid, ind, header):
         hostid = header.ix[ind].HOSTGAL_OBJID
         hostz = header.ix[ind].HOSTGAL_PHOTOZ
         spec = header.ix[ind].HOSTGAL_SPECZ
-        obs = data
 
-        grouped = data.groupby('FLT')
-        obs = pd.DataFrame(data.ix[0]).transpose()
-        obs[:] = np.nan
+        snphot = sncosmo.read_snana_fits('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS', 
+                                         '../MINION_1016_10YR_DDF/LSST_Ia_PHOT.FITS',
+                                         snids=[snid])
+        data = pd.DataFrame(np.asarray(snphot[0]))
+        data = data.query('MAG < 99')
+        if data.shape[0] <= 0:
+                raise Exception
+        survey = data.TELESCOPE.values[0]
+        data = data[['MJD','FLT','FLUXCAL','FLUXCALERR']]
 
-        try:
-            obs = grouped.get_group(filters[0])  # grouped.groups.keys()[0])
-        except:
-            obs.FLT = filters[0]
+        flts = np.array(data.FLT.unique())
+        not_there = filters[~np.in1d(filters, flts)]
+        for f in not_there:
+                tmp = pd.DataFrame(data.iloc[0]).transpose()
+                tmp[:] = np.nan
+                tmp.FLT = f
+                data = data.append(tmp, ignore_index=True)
 
-        for f in filters[1:]:  # grouped.groups.keys()[1:]:
-            print f
-            tmp = pd.DataFrame(data.ix[0]).transpose()
-            tmp[:] = np.nan
-            tmp.FLT = f
-            try:
-                tmp = grouped.get_group(f)
-            except:
-                pass
-            obs = pd.merge(obs, tmp, on=['MJD'], how='outer', suffixes=('', '_'+f))
-        print obs
+        obs = pd.pivot_table(data, ['FLUXCAL', 'FLUXCALERR'], ['FLT', 'MJD'], dropna=False)
+        obs = obs.fillna(-999.)
 
-        return survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, hostz, spec, obs
+	t_arr = obs.loc[flts[0]].index.values #[obs[i][0] for i in xrange(len(obs))]
+	g_arr = obs.loc['g'].FLUXCAL.values/flux_norm #[obs[i][1] for i in xrange(len(obs))]
+	g_err_arr = obs.loc['g'].FLUXCALERR.values/flux_norm #[obs[i][5] for i in xrange(len(obs))]
+	r_arr = obs.loc['r'].FLUXCAL.values/flux_norm #[obs[i][2] for i in xrange(len(obs))]
+	r_err_arr = obs.loc['r'].FLUXCALERR.values/flux_norm #[obs[i][6] for i in xrange(len(obs))]
+	i_arr = obs.loc['i'].FLUXCAL.values/flux_norm #[obs[i][3] for i in xrange(len(obs))]
+	i_err_arr = obs.loc['i'].FLUXCALERR.values/flux_norm #[obs[i][7] for i in xrange(len(obs))]
+	z_arr = obs.loc['z'].FLUXCAL.values/flux_norm #[obs[i][4] for i in xrange(len(obs))]
+	z_err_arr = obs.loc['z'].FLUXCALERR.values/flux_norm #[obs[i][8] for i in xrange(len(obs))]
+	correctplacement = True
+	frac = grouping
+	j = 0
+	while correctplacement:
+		t,index,frac = time_collector(t_arr,frac) 
+		g_temp_arr = []
+		g_err_temp_arr = []
+		r_temp_arr = []
+		r_err_temp_arr = []
+		i_temp_arr = []
+		i_err_temp_arr = []
+		z_temp_arr = []
+		z_err_temp_arr = []
+		tot = []
+		for i in xrange(len(index)):
+			g_temp_arr,g_err_temp_arr,gfail = create_colourband_array(index[i],g_arr,g_err_arr,g_temp_arr,g_err_temp_arr)
+			r_temp_arr,r_err_temp_arr,rfail = create_colourband_array(index[i],r_arr,r_err_arr,r_temp_arr,r_err_temp_arr)
+			i_temp_arr,i_err_temp_arr,ifail = create_colourband_array(index[i],i_arr,i_err_arr,i_temp_arr,i_err_temp_arr)
+			z_temp_arr,z_err_temp_arr,zfail = create_colourband_array(index[i],z_arr,z_err_arr,z_temp_arr,z_err_temp_arr)
+			tot.append(gfail*rfail*ifail*zfail)
+		if all(tot):
+			correctplacement = False
+		else:
+			frac += 0.1
+
+	g_temp_arr,g_err_temp_arr = fill_in_points(g_temp_arr,g_err_temp_arr)
+	r_temp_arr,r_err_temp_arr = fill_in_points(r_temp_arr,r_err_temp_arr)
+	i_temp_arr,i_err_temp_arr = fill_in_points(i_temp_arr,i_err_temp_arr)
+	z_temp_arr,z_err_temp_arr = fill_in_points(z_temp_arr,z_err_temp_arr)
+	obs = [[t[i],g_temp_arr[i],r_temp_arr[i],i_temp_arr[i],z_temp_arr[i],g_err_temp_arr[i],r_err_temp_arr[i],i_err_temp_arr[i],z_err_temp_arr[i]] for i in xrange(len(t))]
+
+        return survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, [hostz], spec, obs
 
 def parser_augment(filename):
 	'''
@@ -447,7 +477,7 @@ if __name__ == '__main__':
 	Program to preprocess supernovae data. Reads in all supernova data and writes it out to one file to
 	be read in by the neural network training program.
 	- Reads in files from ./data/SIMGEN_PUBLIC_DES/ which contains all light curve data.
-	- Creates files in ./data/
+	- Creates files in ./data2/
 	'''
 
 	parser = argparse.ArgumentParser(description='')
@@ -485,11 +515,11 @@ if __name__ == '__main__':
 		print 'Processing augmentation: ',i
 
 		if prefix:
-			fhost = open('data/'+prefix+'_unblind_hostz_'+str(i)+'.csv', 'w')
-			fnohost = open('data/'+prefix+'_unblind_nohostz_'+str(i)+'.csv', 'w')
+			fhost = open('data2/'+prefix+'_unblind_hostz_'+str(i)+'.csv', 'w')
+			fnohost = open('data2/'+prefix+'_unblind_nohostz_'+str(i)+'.csv', 'w')
 		else:
-			fhost = open('data/unblind_hostz_'+str(i)+'.csv', 'w')
-			fnohost = open('data/unblind_nohostz_'+str(i)+'.csv', 'w')
+			fhost = open('data2/unblind_hostz_'+str(i)+'.csv', 'w')
+			fnohost = open('data2/unblind_nohostz_'+str(i)+'.csv', 'w')
 		whost = csv.writer(fhost)
 		wnohost = csv.writer(fnohost)
 		
@@ -504,12 +534,14 @@ if __name__ == '__main__':
 
 		#for f in glob.glob('data/SIMGEN_PUBLIC_DES/DES_*.DAT'):
                 for i, snid in enumerate(snids):
-		
-			survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, hostz, spec, obs = parser(snid, i, header)
+
+                        survey = sn_type = sim_type = sim_z = ra = decl = mwebv = hostid = hostz = spec = obs = None
 			try:
+			        survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, hostz, spec, obs = parser(snid, i, header)
 				unblind = [sim_z, key_types[sim_type]]
 			except:
 				print 'No information for', snid
+                                continue
 			for o in obs:
 				whost.writerow([snid,o[0],ra,decl,mwebv,hostz[0]] + o[1:9] + unblind)
 				wnohost.writerow([snid,o[0],ra,decl,mwebv] + o[1:9] + unblind)
