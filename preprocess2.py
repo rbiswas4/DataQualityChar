@@ -284,8 +284,7 @@ def parser_spline(filename):
 	obs = [[t[i],g_spline(t[i]).tolist(),r_spline(t[i]).tolist(),i_spline(t[i]).tolist(),z_spline(t[i]).tolist(),g_arr[2][index_min(abs(g_arr[0]-t[i]))],r_arr[2][index_min(abs(r_arr[0]-t[i]))],i_arr[2][index_min(abs(i_arr[0]-t[i]))],z_arr[2][index_min(abs(z_arr[0]-t[i]))]] for i in xrange(len(t))]
 	return survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, hostz, spec, obs
 
-def parser_augment_new(snid, ind, header):
-        import sncosmo
+def parser_augment_new(snid, ind, snphot, header):
         print snid
 
         filters = np.array([i[-1] for i in header.columns.values if i.startswith('SIM_PEAKMAG_')])
@@ -300,10 +299,7 @@ def parser_augment_new(snid, ind, header):
         hostz = header.ix[ind].HOSTGAL_PHOTOZ
         spec = header.ix[ind].HOSTGAL_SPECZ
 
-        snphot = sncosmo.read_snana_fits('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS', 
-                                         '../MINION_1016_10YR_DDF/LSST_Ia_PHOT.FITS',
-                                         snids=[snid])
-        data = pd.DataFrame(np.asarray(snphot[0]))
+        data = pd.DataFrame(np.asarray(snphot))
         data = data.query('MAG < 99')
         if data.shape[0] <= 0:
                 raise Exception
@@ -511,6 +507,21 @@ if __name__ == '__main__':
 	else:
 		prefix = ''
 
+        # NEW:
+        print 'READING IN ALL SN TABLES'
+        from astropy.io import fits
+        header = fits.open('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS')
+        snids = header[1].data['SNID']
+        import pandas as pd
+        header = pd.DataFrame(np.asarray(header[1].data))
+
+        import sncosmo
+        # Faster to pre-read it all in.
+        snphot = sncosmo.read_snana_fits('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS', 
+                                         '../MINION_1016_10YR_DDF/LSST_Ia_PHOT.FITS')
+        print 'DONE READING:', len(snphot), len(snids)
+        # END NEW
+
 	for i in xrange(1,nb_augment+1):
 
 		print 'Processing augmentation: ',i
@@ -527,18 +538,11 @@ if __name__ == '__main__':
 		sn_types = {}
 		nb_sn = 0
 
-                from astropy.io import fits
-                header = fits.open('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS')
-                snids = header[1].data['SNID']
-                import pandas as pd
-                header = pd.DataFrame(np.asarray(header[1].data))
-
 		#for f in glob.glob('data/SIMGEN_PUBLIC_DES/DES_*.DAT'):
                 for i, snid in enumerate(snids):
-
                         survey = sn_type = sim_type = sim_z = ra = decl = mwebv = hostid = hostz = spec = obs = None
 			try:
-			        survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, hostz, spec, obs = parser(snid, i, header)
+			        survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, hostz, spec, obs = parser(snid, i, snphot[i], header)
 				unblind = [sim_z, key_types[sim_type]]
 			except:
 				print 'No information for', snid
