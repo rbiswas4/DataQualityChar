@@ -285,7 +285,8 @@ def parser_spline(filename):
 	return survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, hostz, spec, obs
 
 def parser_augment_new(snid, ind, snphot, header):
-        print snid
+        sim_type = header.ix[ind].SIM_TYPE_NAME.strip()
+        print ind, snid, sim_type
 
         filters = np.array([i[-1] for i in header.columns.values if i.startswith('SIM_PEAKMAG_')])
 
@@ -508,53 +509,77 @@ if __name__ == '__main__':
 		prefix = ''
 
         # NEW:
-        print 'READING IN ALL SN TABLES'
-        from astropy.io import fits
-        header = fits.open('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS')
-        snids = header[1].data['SNID']
-        import pandas as pd
-        header = pd.DataFrame(np.asarray(header[1].data))
+        try: # skip if already read in.
+                print 'DONE READING Ia:', len(snphotIa)
+                print 'DONE READING NONIa:', len(snphotNonIa)
+        except:
+                print 'READING IN ALL SN TABLES'
+                from astropy.io import fits
+                import pandas as pd
+                import numpy as np
 
-        import sncosmo
-        # Faster to pre-read it all in.
-        snphot = sncosmo.read_snana_fits('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS', 
-                                         '../MINION_1016_10YR_DDF/LSST_Ia_PHOT.FITS')
-        print 'DONE READING:', len(snphot), len(snids)
+                headerIa = fits.open('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS')
+                headerIa = pd.DataFrame(np.asarray(headerIa[1].data))
+                print headerIa.shape
+                headerNonIa = fits.open('../MINION_1016_10YR_DDF/LSST_NONIa_HEAD.FITS')
+                headerNonIa = pd.DataFrame(np.asarray(headerNonIa[1].data))
+                print headerNonIa.shape
+
+                # Faster to pre-read it all in.
+                import sncosmo
+                print 'LOADING PHOTOMETRY...'
+                snphotIa = sncosmo.read_snana_fits('../MINION_1016_10YR_DDF/LSST_Ia_HEAD.FITS',
+                                                   '../MINION_1016_10YR_DDF/LSST_Ia_PHOT.FITS')
+                print 'DONE READING Ia:', len(snphotIa)
+                snphotNonIa = sncosmo.read_snana_fits('../MINION_1016_10YR_DDF/LSST_NONIa_HEAD.FITS',
+                                                      '../MINION_1016_10YR_DDF/LSST_NONIa_PHOT.FITS')
+                print 'DONE READING NONIa:', len(snphotNonIa)
         # END NEW
 
 	for i in xrange(1,nb_augment+1):
 
 		print 'Processing augmentation: ',i
+                if prefix:
+                        fhost = open('data2/'+prefix+'_unblind_hostz_'+str(i)+'.csv', 'w')
+                        fnohost = open('data2/'+prefix+'_unblind_nohostz_'+str(i)+'.csv', 'w')
+                else:
+                        fhost = open('data2/unblind_hostz_'+str(i)+'.csv', 'w')
+                        fnohost = open('data2/unblind_nohostz_'+str(i)+'.csv', 'w')
+                whost = csv.writer(fhost)
+                wnohost = csv.writer(fnohost)
 
-		if prefix:
-			fhost = open('data2/'+prefix+'_unblind_hostz_'+str(i)+'.csv', 'w')
-			fnohost = open('data2/'+prefix+'_unblind_nohostz_'+str(i)+'.csv', 'w')
-		else:
-			fhost = open('data2/unblind_hostz_'+str(i)+'.csv', 'w')
-			fnohost = open('data2/unblind_nohostz_'+str(i)+'.csv', 'w')
-		whost = csv.writer(fhost)
-		wnohost = csv.writer(fnohost)
-		
-		sn_types = {}
-		nb_sn = 0
+                sn_types = {}
+                nb_sn = 0
+                for photFile in [1,2]:
+                        if photFile == 1:
+                                snphot = snphotIa
+                                header = headerIa
+                                snids = headerIa.SNID.values
+                        elif photFile == 2:
+                                snphot = snphotNonIa
+                                header = headerNonIa
+                                snids = headerNonIa.SNID.values
+                        snids = [id.strip() for id in snids]
 
-		#for f in glob.glob('data/SIMGEN_PUBLIC_DES/DES_*.DAT'):
-                for i, snid in enumerate(snids):
-                        survey = sn_type = sim_type = sim_z = ra = decl = mwebv = hostid = hostz = spec = obs = None
-			try:
-			        survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, hostz, spec, obs = parser(snid, i, snphot[i], header)
-				unblind = [sim_z, key_types[sim_type]]
-			except:
-				print 'No information for', snid
-                                continue
-			for o in obs:
-				whost.writerow([snid,o[0],ra,decl,mwebv,hostz[0]] + o[1:9] + unblind)
-				wnohost.writerow([snid,o[0],ra,decl,mwebv] + o[1:9] + unblind)
-			try:
-				sn_types[unblind[1]] += 1
-			except:
-				sn_types[unblind[1]] = 0
-			nb_sn += 1
+                        #for f in glob.glob('data/SIMGEN_PUBLIC_DES/DES_*.DAT'):
+                        for i, snid in enumerate(snids):
+                                survey = sn_type = sim_type = sim_z = ra = decl = mwebv = hostid = hostz = spec = obs = None
+                                try:
+                                        survey, snid, sn_type, sim_type, sim_z, ra, decl, mwebv, hostid, hostz, spec, obs = parser(snid, i, snphot[i], header)
+                                        if sim_type == 'IIN':
+                                                sim_type = 'IIn'
+                                        unblind = [sim_z, key_types[sim_type]]
+                                except:
+                                        print 'No information for', snid
+                                        continue
+                                for o in obs:
+                                        whost.writerow([snid,o[0],ra,decl,mwebv,hostz[0]] + o[1:9] + unblind)
+                                        wnohost.writerow([snid,o[0],ra,decl,mwebv] + o[1:9] + unblind)
+                                try:
+                                        sn_types[unblind[1]] += 1
+                                except:
+                                        sn_types[unblind[1]] = 0
+                                nb_sn += 1
 
 		fhost.close()
 		fnohost.close()
