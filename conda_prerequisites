@@ -1,0 +1,11 @@
+pandas
+nose
+pytest
+future
+pytest-cov
+python-coveralls
+coveralls
+coverage
+matplotlib
+numpy
+scipy

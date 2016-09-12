@@ -1,15 +1,16 @@
 language: C
 
 install:
-  - travis_wait 25 ./continuous_integration/INSTALL_MINICONDAPACKAGES.sh pandas nose
+  #- travis_wait 25 ./continuous_integration/INSTALL_MINICONDAPACKAGES.sh pandas nose
+  - travis_wait 25 ./continuous_integration/install.sh
   - export PATH="$HOME/miniconda/bin:$PATH"
-  - pip install nose
-  - pip install pytest
-  - pip install future
-  - pip install pytest-cov
-  - pip install python-coveralls
-  - pip install coveralls
-  - pip install coverage
+  #  - pip install nose
+  #  - pip install pytest
+  #  - pip install future
+  #  - pip install pytest-cov
+  #  - pip install python-coveralls
+  #  - pip install coveralls
+  #  - pip install coverage
 cache:
   directories:
   - $HOME/miniconda.tarball
