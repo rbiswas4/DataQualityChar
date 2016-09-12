@@ -6,4 +6,6 @@
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
 ## script to install conda pre-requisites
+conda config --set always_yes yes
+conda config --add channels anaconda
 ${DIR}/INSTALL_MINICONDAPACKAGES.sh --file conda_prerequisites
