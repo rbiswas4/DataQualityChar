@@ -20,7 +20,7 @@ print(__version__)
 setup(# package information
       name=PACKAGENAME,
       version=__version__,
-      description='Characteristics of lcchar',
+      description='Characteristics of Supernova Light Curves',
       long_description=''' ''',
       # What code to include as packages
       packages=[PACKAGENAME],
